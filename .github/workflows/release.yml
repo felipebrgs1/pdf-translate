@@ -13,11 +13,19 @@ on:
         default: ""
 
 permissions:
-  contents: write
+  contents: write  # mínimo necessário para criar Release; default do repo é read
+
+# Só o dono pode disparar release (mantém open-source mas bloqueia fork/third-party)
+# Push de tag já exige permissão de escrita (só você tem), mas o if garante que
+# mesmo se alguém conseguir abrir workflow_dispatch, só felipebrgs1 executa.
+concurrency:
+  group: release-linux
+  cancel-in-progress: false
 
 jobs:
   build-linux:
     name: Build Linux x64
+    if: github.actor == 'felipebrgs1' || github.actor == github.repository_owner
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
