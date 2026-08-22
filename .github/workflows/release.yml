@@ -93,6 +93,7 @@ jobs:
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           VERSION="${{ steps.version.outputs.version }}"
+          # versão deb não pode ter hífen semântico extra, normaliza
           DEB_VERSION=$(echo "${VERSION}" | sed 's/-/~/' )
           BASENAME="pdf-translate-${TAG}-linux-x64"
           BUNDLE="build/linux/x64/release/bundle"
@@ -101,20 +102,28 @@ jobs:
           mkdir -p "${PKGDIR}/usr/bin"
           mkdir -p "${PKGDIR}/usr/share/applications"
           mkdir -p "${PKGDIR}/usr/share/icons/hicolor/512x512/apps"
-          mkdir -p "${PKGDIR}/usr/share/icons/hicolor/256x256/apps"
-          mkdir -p "${PKGDIR}/usr/share/pixmaps"
           cp -r "${BUNDLE}"/* "${PKGDIR}/opt/pdf-translate/"
+          # wrapper
           cat > "${PKGDIR}/usr/bin/pdf-translate" << 'EOF'
           #!/bin/sh
-          if [ -x /opt/pdf-translate/pdf-translate ]; then exec /opt/pdf-translate/pdf-translate "$@"; else exec /opt/pdf-translate/app "$@"; fi
+          exec /opt/pdf-translate/app "$@"
           EOF
           chmod +x "${PKGDIR}/usr/bin/pdf-translate"
-          printf '%s\n' '[Desktop Entry]' 'Name=PDF Translate' 'GenericName=Leitor de PDF' 'Comment=Leitor de PDF com tradução, anotações e estatísticas' 'Exec=/usr/bin/pdf-translate %U' 'Icon=pdf-translate' 'Terminal=false' 'Type=Application' 'Categories=Office;Viewer;Education;' 'Keywords=pdf;translate;leitor;' 'StartupWMClass=dev.felipebrgs.pdftranslate' 'StartupNotify=true' 'MimeType=application/pdf;' > "${PKGDIR}/usr/share/applications/pdf-translate.desktop"
-          printf '%s\n' '[Desktop Entry]' 'Name=PDF Translate' 'GenericName=Leitor de PDF' 'Comment=Leitor de PDF com tradução, anotações e estatísticas' 'Exec=/usr/bin/pdf-translate %U' 'Icon=pdf-translate' 'Terminal=false' 'Type=Application' 'Categories=Office;Viewer;Education;' 'Keywords=pdf;translate;leitor;' 'StartupWMClass=dev.felipebrgs.pdftranslate' 'StartupNotify=true' 'MimeType=application/pdf;' > "${PKGDIR}/usr/share/applications/dev.felipebrgs.pdftranslate.desktop"
+          # .desktop
+          cat > "${PKGDIR}/usr/share/applications/pdf-translate.desktop" << EOF
+          [Desktop Entry]
+          Name=PDF Translate
+          Comment=Leitor de PDF com tradução
+          Exec=/opt/pdf-translate/app
+          Icon=pdf-translate
+          Terminal=false
+          Type=Application
+          Categories=Office;Viewer;
+          StartupWMClass=pdf_translate
+          EOF
+          # ícone se existir
           if [ -f "assets/icon/app_icon.png" ]; then
             cp assets/icon/app_icon.png "${PKGDIR}/usr/share/icons/hicolor/512x512/apps/pdf-translate.png"
-            cp assets/icon/app_icon.png "${PKGDIR}/usr/share/icons/hicolor/256x256/apps/pdf-translate.png"
-            cp assets/icon/app_icon.png "${PKGDIR}/usr/share/pixmaps/pdf-translate.png"
           fi
           mkdir -p "${PKGDIR}/DEBIAN"
           cat > "${PKGDIR}/DEBIAN/control" << EOF
@@ -151,10 +160,10 @@ jobs:
 
       # Para workflow_dispatch com tag manual
       - name: Criar Release (manual)
-        if: github.event.inputs.tag != '' && !startsWith(github.ref, 'refs/tags/')
+        if: inputs.tag != '' && !startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag }}
+          tag_name: ${{ inputs.tag }}
           files: dist/*
           generate_release_notes: true
           fail_on_unmatched_files: true
