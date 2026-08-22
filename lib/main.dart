@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'src/api/api.dart';
+import 'src/features/auth/auth_gate.dart';
 import 'src/features/auth/login_screen.dart';
 import 'src/features/library/library_screen.dart';
 import 'src/features/reader/reader_screen.dart';
@@ -29,9 +30,11 @@ class PdfTranslateApp extends StatelessWidget {
         scaffoldBackgroundColor: Colors.black,
         colorScheme: const ColorScheme.dark(primary: Colors.white),
       ),
-      initialRoute: '/login',
+      initialRoute: '/',
       onGenerateRoute: (settings) {
         switch (settings.name) {
+          case '/':
+            return MaterialPageRoute(builder: (_) => const AuthGate());
           case '/login':
             return MaterialPageRoute(builder: (_) => const LoginScreen());
           case '/library':
