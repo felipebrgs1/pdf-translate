@@ -6,10 +6,13 @@ import 'src/features/library/library_screen.dart';
 import 'src/features/reader/reader_screen.dart';
 import 'src/features/stats/stats_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final api = Api();
+  await api.loadPersistedToken();
   runApp(
-    Provider<Api>(
-      create: (_) => Api(),
+    Provider<Api>.value(
+      value: api,
       child: const PdfTranslateApp(),
     ),
   );

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 const defaultBaseUrl = 'https://pdf-translate.felipebrgs.workers.dev';
 
@@ -23,6 +24,24 @@ class Api {
         if (_bearer != null) 'Authorization': 'Bearer $_bearer',
       };
 
+  Future<void> loadPersistedToken() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _bearer = prefs.getString('auth_token');
+    } catch (_) {}
+  }
+
+  Future<void> _persistToken(String? t) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (t == null) {
+        await prefs.remove('auth_token');
+      } else {
+        await prefs.setString('auth_token', t);
+      }
+    } catch (_) {}
+  }
+
   Future<Map<String, dynamic>> me() async {
     final r = await _client.get(Uri.parse('$baseUrl/api/me'), headers: _headers);
     return _json(r);
@@ -34,14 +53,17 @@ class Api {
       headers: _headers,
       body: jsonEncode({'email': email, 'password': password}),
     );
-    final data = _json(r);
-    // tenta extrair token se o Worker passar em JSON (ajuste opcional no Worker)
+    final data = _json(r) as Map<String, dynamic>;
     _bearer = data['token'] as String?;
+    await _persistToken(_bearer);
   }
 
   Future<void> logout() async {
-    await _client.post(Uri.parse('$baseUrl/api/logout'), headers: _headers);
+    try {
+      await _client.post(Uri.parse('$baseUrl/api/logout'), headers: _headers);
+    } catch (_) {}
     _bearer = null;
+    await _persistToken(null);
   }
 
   Future<List<Book>> listBooks() async {

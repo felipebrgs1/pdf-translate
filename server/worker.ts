@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { cors } from 'hono/cors'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { sign, verify } from 'hono/jwt'
 
@@ -17,6 +18,13 @@ const SESSION_TTL = 60 * 60 * 24 * 30
 
 const app = new Hono<Env>()
 
+// CORS para Flutter (web em localhost, mobile) — web legada servida do mesmo Worker não precisa mas não atrapalha
+app.use('*', cors({
+  origin: '*',
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization', 'x-file-name', 'x-book-key'],
+}))
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 async function sha256Hex(text: string) {
@@ -25,7 +33,11 @@ async function sha256Hex(text: string) {
 }
 
 async function getUser(c: { req: { raw: Request }; env: Env['Bindings'] }) {
-  const token = getCookie(c as never, SESSION_COOKIE)
+  let token = getCookie(c as never, SESSION_COOKIE) as string | undefined
+  if (!token) {
+    const auth = c.req.header('authorization') ?? c.req.header('Authorization')
+    if (auth?.toLowerCase().startsWith('bearer ')) token = auth.slice(7).trim()
+  }
   if (!token) return null
   try {
     const payload = await verify(token, c.env.JWT_SECRET, 'HS256')
@@ -56,7 +68,7 @@ app.post('/api/login', async (c) => {
     path: '/',
     maxAge: SESSION_TTL
   })
-  return c.json({ ok: true })
+  return c.json({ ok: true, token })
 })
 
 app.post('/api/logout', (c) => {
