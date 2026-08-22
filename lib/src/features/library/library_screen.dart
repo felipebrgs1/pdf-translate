@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api.dart';
 import '../../cache/pdf_cache.dart';
+import '../../cache/pdf_compress.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -39,9 +40,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (res == null || res.files.single.bytes == null) return;
     final f = res.files.single;
     try {
+      Uint8List bytes = f.bytes!;
+      final original = bytes.length;
+      // compressão client-side antes de enviar pro R2
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Comprimindo PDF...'), duration: Duration(seconds: 1)));
+      final compressed = await compressPdf(bytes);
+      bytes = compressed;
+      final saved = original - bytes.length;
+      if (saved > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Economizado ${formatBytes(saved)} (${((saved / original) * 100).toStringAsFixed(0)}%) — enviando...')));
+      }
       final api = context.read<Api>();
-      await api.uploadBook(f.bytes!, f.name);
+      await api.uploadBook(bytes, f.name);
       await _refresh();
+      if (saved > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Enviado ${formatBytes(bytes.length)} (original ${formatBytes(original)})')));
+      }
     } catch (e) {
       setState(() => _error = e.toString());
     }
