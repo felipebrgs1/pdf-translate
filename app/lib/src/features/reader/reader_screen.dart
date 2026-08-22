@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -181,6 +182,25 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return m == 0 ? '${h}h' : '${h}h ${m}min';
   }
 
+  Future<void> _nextPage() async {
+    if (!_controller.isReady) return;
+    if (_currentPage >= _totalPages) return;
+    try { await _controller.goToPage(pageNumber: _currentPage + 1); } catch (_) {}
+  }
+
+  Future<void> _prevPage() async {
+    if (!_controller.isReady) return;
+    if (_currentPage <= 1) return;
+    try { await _controller.goToPage(pageNumber: _currentPage - 1); } catch (_) {}
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) { _nextPage(); return KeyEventResult.handled; }
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) { _prevPage(); return KeyEventResult.handled; }
+    return KeyEventResult.ignored;
+  }
+
   @override
   void dispose() {
     _controller.removeListener(_onViewerChange);
@@ -201,7 +221,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final remaining = (_totalPages - _currentPage).clamp(0, 9999);
     final eta = remaining * 2;
 
-    return Scaffold(
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
@@ -288,6 +311,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
               },
               child: const Icon(Icons.translate),
             ),
+      ),
     );
   }
 
