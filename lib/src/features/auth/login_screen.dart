@@ -53,7 +53,30 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                   child: Text(_loading ? 'Entrando…' : 'Entrar'),
                 ),
-              )
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: _loading
+                      ? null
+                      : () async {
+                          setState(() { _loading = true; _error = null; });
+                          try {
+                            await api.register(_email.text.trim(), _pass.text);
+                            if (!mounted) return;
+                            Navigator.of(context).pushReplacementNamed('/library');
+                          } catch (e) {
+                            setState(() => _error = e.toString());
+                          } finally {
+                            if (mounted) setState(() => _loading = false);
+                          }
+                        },
+                  child: const Text('Criar conta — 150MB grátis'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text('Cadastro só com e-mail e senha', style: TextStyle(color: Colors.white38, fontSize: 11)),
             ]),
           ),
         ),

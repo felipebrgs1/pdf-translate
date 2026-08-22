@@ -47,6 +47,17 @@ class Api {
     return _json(r);
   }
 
+  Future<void> register(String email, String password) async {
+    final r = await _client.post(
+      Uri.parse('$baseUrl/api/register'),
+      headers: _headers,
+      body: jsonEncode({'email': email, 'password': password}),
+    );
+    final data = _json(r) as Map<String, dynamic>;
+    _bearer = data['token'] as String?;
+    await _persistToken(_bearer);
+  }
+
   Future<void> login(String email, String password) async {
     final r = await _client.post(
       Uri.parse('$baseUrl/api/login'),
