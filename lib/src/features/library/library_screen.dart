@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api.dart';
+import '../../cache/pdf_cache.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -74,39 +75,65 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       itemBuilder: (_, i) {
                         final b = _books[i];
                         return InkWell(
-                          onTap: () => Navigator.pushNamed(context, '/reader', arguments: b),
+                          onTap: () => Navigator.pushNamed(context, '/reader', arguments: b).then((_) => _refresh()),
                           child: Container(
                             clipBehavior: Clip.antiAlias,
                             decoration: BoxDecoration(border: Border.all(color: Colors.white12), borderRadius: BorderRadius.circular(12)),
                             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                              // capa autenticada (mesmo /api/thumbs da web, agora via Bearer)
+                              // capa autenticada + selo offline
                               Expanded(
-                                child: FutureBuilder<Uint8List?>(
-                                  future: context.read<Api>().getThumbBytes(b.key),
-                                  builder: (_, snap) {
-                                    if (snap.connectionState == ConnectionState.waiting) {
-                                      return Container(color: const Color(0xFF18181B), child: const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))));
-                                    }
-                                    final bytes = snap.data;
-                                    if (bytes != null && bytes.isNotEmpty) {
-                                      return Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true,
-                                          errorBuilder: (_, __, ___) => Container(color: const Color(0xFF18181B), child: const Icon(Icons.broken_image, color: Colors.white24)));
-                                    }
-                                    return Container(
-                                      color: const Color(0xFF18181B),
-                                      child: const Center(child: Icon(Icons.picture_as_pdf, color: Colors.white24, size: 40)),
-                                    );
-                                  },
-                                ),
+                                child: Stack(children: [
+                                  Positioned.fill(
+                                    child: FutureBuilder<Uint8List?>(
+                                      future: context.read<Api>().getThumbBytes(b.key),
+                                      builder: (_, snap) {
+                                        if (snap.connectionState == ConnectionState.waiting) {
+                                          return Container(color: const Color(0xFF18181B), child: const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))));
+                                        }
+                                        final bytes = snap.data;
+                                        if (bytes != null && bytes.isNotEmpty) {
+                                          return Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true,
+                                              errorBuilder: (_, __, ___) => Container(color: const Color(0xFF18181B), child: const Icon(Icons.broken_image, color: Colors.white24)));
+                                        }
+                                        return Container(
+                                          color: const Color(0xFF18181B),
+                                          child: const Center(child: Icon(Icons.picture_as_pdf, color: Colors.white24, size: 40)),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  // icone offline (aparece apos abrir o livro uma vez)
+                                  Positioned(
+                                    right: 6,
+                                    top: 6,
+                                    child: FutureBuilder<bool>(
+                                      future: isPdfCached(b.key),
+                                      builder: (_, snap) {
+                                        final cached = snap.data == true;
+                                        if (!cached) return const SizedBox.shrink();
+                                        return Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(6)),
+                                          child: const Icon(Icons.offline_pin, size: 14, color: Color(0xFF4ADE80)),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ]),
                               ),
                               Padding(
                                 padding: const EdgeInsets.all(10),
                                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                   Text(b.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 13)),
                                   const SizedBox(height: 6),
-                                  if (b.progress != null) LinearProgressIndicator(value: (b.progress!.percent / 100).clamp(0, 1)),
-                                  if (b.progress != null) const SizedBox(height: 4),
-                                  Text('${(b.size / 1024).toStringAsFixed(0)} KB', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                                  if (b.progress != null) ...[
+                                    Text('Página ${b.progress!.page} de ${b.progress!.totalPages} · ${b.progress!.percent % 1 == 0 ? b.progress!.percent.toStringAsFixed(0) : b.progress!.percent.toStringAsFixed(1)}%', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                    const SizedBox(height: 4),
+                                    LinearProgressIndicator(value: (b.progress!.percent / 100).clamp(0, 1), minHeight: 3),
+                                    const SizedBox(height: 4),
+                                    Text('${(b.size / 1024).toStringAsFixed(0)} KB', style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                                  ] else
+                                    Text('${(b.size / 1024).toStringAsFixed(0)} KB', style: const TextStyle(color: Colors.white38, fontSize: 11)),
                                 ]),
                               ),
                             ]),

@@ -6,6 +6,7 @@ import 'package:pdfrx/pdfrx.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../api/api.dart';
+import '../../cache/pdf_cache.dart';
 
 class ReaderScreen extends StatefulWidget {
   final Book book;
@@ -135,9 +136,22 @@ class _ReaderScreenState extends State<ReaderScreen> {
     } catch (_) {
       // sem progresso no servidor — mantém local
     }
+    Uint8List? bytes;
+    String? bytesError;
     try {
-      final bytes = await api.getBookBytes(widget.book.key);
-      if (!mounted) return;
+      bytes = await api.getBookBytes(widget.book.key);
+      // salva para offline
+      if (bytes != null) await savePdfToCache(widget.book.key, bytes);
+    } catch (e) {
+      bytesError = e.toString();
+      // fallback offline: tenta cache local se rede falhar
+      try {
+        final f = await cachedPdfFile(widget.book.key);
+        if (await f.exists()) bytes = await f.readAsBytes();
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    if (bytes != null && bytes.isNotEmpty) {
       setState(() {
         _pdfBytes = bytes;
         _initialPage = startPage;
@@ -145,10 +159,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _lastStatPage = startPage;
         _loading = false;
       });
-    } catch (e) {
-      if (!mounted) return;
+    } else {
       setState(() {
-        _loadError = e.toString();
+        _loadError = bytesError ?? 'Falha ao carregar PDF e sem cache offline';
         _loading = false;
       });
     }
