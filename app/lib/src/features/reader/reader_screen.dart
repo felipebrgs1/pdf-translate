@@ -1,11 +1,11 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../api/api.dart';
 
-// Leitor com pdfrx — replica PdfViewer.vue + TranslatePopup + anotações.
-// Por enquanto usa overlay de ferramentas e viewer básico; iterar para seleção/tradução completa.
 class ReaderScreen extends StatefulWidget {
   final Book book;
   const ReaderScreen({super.key, required this.book});
@@ -17,6 +17,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
   final _controller = PdfViewerController();
   int _currentPage = 1;
   int _totalPages = 0;
+  int _initialPage = 1;
+  Uint8List? _pdfBytes;
+  bool _loading = true;
+  String? _loadError;
   double _zoom = 1.0;
   String? _selectedText;
   String? _translated;
@@ -26,10 +30,93 @@ class _ReaderScreenState extends State<ReaderScreen> {
   int _lastStatPage = 1;
   String _tool = 'select';
   Color _color = const Color(0xFFFDE047);
+  Timer? _saveTimer;
+  Timer? _clock;
 
   String _today() {
     final d = DateTime.now();
     return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  }
+
+  String _pageKey() => 'pdf-translate:page:${widget.book.key}';
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onViewerChange);
+    // leitura por minuto igual ao web
+    _clock = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (!mounted) return;
+      if (ModalRoute.of(context)?.isCurrent ?? true) {
+        _queueStat(minutes: 1);
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    final api = context.read<Api>();
+    int startPage = 1;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final local = prefs.getInt(_pageKey());
+      if (local != null && local >= 1) startPage = local;
+    } catch (_) {}
+    try {
+      final prog = await api.getProgress(widget.book.key);
+      if (prog != null && prog.page >= 1) {
+        startPage = prog.page;
+        // sincroniza local com servidor
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt(_pageKey(), startPage);
+        } catch (_) {}
+      }
+    } catch (_) {
+      // sem progresso no servidor — mantém local
+    }
+    try {
+      final bytes = await api.getBookBytes(widget.book.key);
+      if (!mounted) return;
+      setState(() {
+        _pdfBytes = bytes;
+        _initialPage = startPage;
+        _currentPage = startPage;
+        _lastStatPage = startPage;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  void _onViewerChange() {
+    if (!_controller.isReady) return;
+    final p = _controller.pageNumber;
+    final total = _controller.pageCount;
+    if (total != 0 && total != _totalPages) {
+      setState(() => _totalPages = total);
+    }
+    if (p != null && p != _currentPage) {
+      setState(() => _currentPage = p);
+      if (p > _lastStatPage) _queueStat(pages: (p - _lastStatPage).clamp(0, 100));
+      _lastStatPage = p;
+      _saveProgress(p);
+      SharedPreferences.getInstance().then((pr) => pr.setInt(_pageKey(), p));
+    }
+  }
+
+  void _saveProgress(int page) {
+    if (_totalPages < 1) return;
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      context.read<Api>().saveProgress(widget.book.key, page, _totalPages).catchError((_) {});
+    });
   }
 
   void _queueStat({int pages = 0, int minutes = 0, int highlights = 0}) {
@@ -42,7 +129,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
       final date = _today();
       final p = _pendingPages, m = _pendingMinutes, h = _pendingHighlights;
       _pendingPages = 0; _pendingMinutes = 0; _pendingHighlights = 0;
-      try { await context.read<Api>().addStats(date: date, pages: p, minutes: m, highlights: h); } catch (_) {}
+      try {
+        await context.read<Api>().addStats(date: date, pages: p, minutes: m, highlights: h);
+      } catch (_) {}
     });
   }
 
@@ -52,6 +141,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (min < 60) return '$min min';
     final h = min ~/ 60, m = min % 60;
     return m == 0 ? '${h}h' : '${h}h ${m}min';
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onViewerChange);
+    _saveTimer?.cancel();
+    _clock?.cancel();
+    // garante último save
+    if (_totalPages >= 1) {
+      try {
+        SharedPreferences.getInstance().then((pr) => pr.setInt(_pageKey(), _currentPage));
+      } catch (_) {}
+    }
+    super.dispose();
   }
 
   @override
@@ -97,7 +200,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 ),
             ],
             const Spacer(),
-            Text('$_currentPage / $_totalPages', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            Text('$_currentPage / ${_totalPages == 0 ? "—" : _totalPages}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
           ]),
         ),
         if (_totalPages > 0)
@@ -108,19 +211,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
             child: Text('Faltam $remaining pág · ~${_formatEta(eta)} para terminar', style: const TextStyle(color: Colors.white54, fontSize: 11)),
           ),
         Expanded(
-          child: FutureBuilder<Uint8List>(
-            future: api.getBookBytes(widget.book.key),
-            builder: (context, snap) {
-              if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-              if (snap.hasError || !snap.hasData) return Center(child: Text('Erro: ${snap.error}', style: const TextStyle(color: Colors.redAccent)));
-              return PdfViewer.data(
-                snap.data!,
-                sourceName: widget.book.name,
-                controller: _controller,
-                params: const PdfViewerParams(),
-              );
-            },
-          ),
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _loadError != null
+                  ? Center(child: Text(_loadError!, style: const TextStyle(color: Colors.redAccent)))
+                  : _pdfBytes == null
+                      ? const Center(child: Text('Sem dados', style: TextStyle(color: Colors.white54)))
+                      : PdfViewer.data(
+                          _pdfBytes!,
+                          sourceName: widget.book.name,
+                          controller: _controller,
+                          initialPageNumber: _initialPage,
+                          params: const PdfViewerParams(),
+                        ),
         ),
         if (_selectedText != null)
           Container(
