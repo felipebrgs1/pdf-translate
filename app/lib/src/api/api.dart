@@ -113,6 +113,13 @@ class Api {
     return r.bodyBytes;
   }
 
+  Future<Uint8List?> getThumbBytes(String key) async {
+    final r = await _client.get(Uri.parse('$baseUrl/api/thumbs/$key'), headers: _headers);
+    if (r.statusCode == 404) return null;
+    if (r.statusCode != 200) throw Exception('thumb failed ${r.statusCode}');
+    return r.bodyBytes;
+  }
+
   Future<Map<String, DayStats>> getStats() async {
     final r = await _client.get(Uri.parse('$baseUrl/api/stats'), headers: _headers);
     final data = _json(r) as Map<String, dynamic>;

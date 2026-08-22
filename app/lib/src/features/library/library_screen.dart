@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -75,16 +76,39 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         return InkWell(
                           onTap: () => Navigator.pushNamed(context, '/reader', arguments: b),
                           child: Container(
+                            clipBehavior: Clip.antiAlias,
                             decoration: BoxDecoration(border: Border.all(color: Colors.white12), borderRadius: BorderRadius.circular(12)),
-                            padding: const EdgeInsets.all(12),
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              const Icon(Icons.picture_as_pdf, color: Colors.white30, size: 40),
-                              const SizedBox(height: 8),
-                              Text(b.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 13)),
-                              const Spacer(),
-                              if (b.progress != null) LinearProgressIndicator(value: (b.progress!.percent / 100).clamp(0, 1)),
-                              const SizedBox(height: 4),
-                              Text('${(b.size / 1024).toStringAsFixed(0)} KB', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                              // capa autenticada (mesmo /api/thumbs da web, agora via Bearer)
+                              Expanded(
+                                child: FutureBuilder<Uint8List?>(
+                                  future: context.read<Api>().getThumbBytes(b.key),
+                                  builder: (_, snap) {
+                                    if (snap.connectionState == ConnectionState.waiting) {
+                                      return Container(color: const Color(0xFF18181B), child: const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))));
+                                    }
+                                    final bytes = snap.data;
+                                    if (bytes != null && bytes.isNotEmpty) {
+                                      return Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true,
+                                          errorBuilder: (_, __, ___) => Container(color: const Color(0xFF18181B), child: const Icon(Icons.broken_image, color: Colors.white24)));
+                                    }
+                                    return Container(
+                                      color: const Color(0xFF18181B),
+                                      child: const Center(child: Icon(Icons.picture_as_pdf, color: Colors.white24, size: 40)),
+                                    );
+                                  },
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(10),
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  Text(b.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                                  const SizedBox(height: 6),
+                                  if (b.progress != null) LinearProgressIndicator(value: (b.progress!.percent / 100).clamp(0, 1)),
+                                  if (b.progress != null) const SizedBox(height: 4),
+                                  Text('${(b.size / 1024).toStringAsFixed(0)} KB', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                                ]),
+                              ),
                             ]),
                           ),
                         );
