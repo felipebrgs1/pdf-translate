@@ -53,6 +53,45 @@ static void my_application_activate(GApplication* application) {
   }
 
   gtk_window_set_default_size(window, 1280, 720);
+  gtk_window_set_icon_name(window, "pdf-translate");
+  gtk_window_set_default_icon_name("pdf-translate");
+  // Fallback: carrega pixbuf se o tema ainda não tem o ícone (flutter run / bundle sem install)
+  {
+    g_autoptr(GError) err = nullptr;
+    g_autoptr(GdkPixbuf) pixbuf = nullptr;
+    gchar *home_icon = g_build_filename(g_get_home_dir(), ".local/share/icons/hicolor/512x512/apps/pdf-translate.png", nullptr);
+    // tenta achar o executável para montar caminho do bundle
+    gchar *exe_path = nullptr;
+    gchar *exe_link = g_file_read_link("/proc/self/exe", &err);
+    if (exe_link != nullptr) exe_path = g_path_get_dirname(exe_link);
+    gchar *bundle_icon = nullptr;
+    gchar *project_icon = nullptr;
+    if (exe_path != nullptr) {
+      bundle_icon = g_build_filename(exe_path, "data/flutter_assets/assets/icon/app_icon.png", nullptr);
+      // exe_path = .../build/linux/x64/debug/bundle -> sobe 4 níveis até a raiz do projeto
+      gchar *p1 = g_path_get_dirname(exe_path);
+      gchar *p2 = p1 ? g_path_get_dirname(p1) : nullptr;
+      gchar *p3 = p2 ? g_path_get_dirname(p2) : nullptr;
+      gchar *p4 = p3 ? g_path_get_dirname(p3) : nullptr;
+      gchar *project_root = p4 ? g_path_get_dirname(p4) : nullptr; // .../pdf_translate
+      if (project_root != nullptr) project_icon = g_build_filename(project_root, "assets/icon/app_icon.png", nullptr);
+      g_free(p1); g_free(p2); g_free(p3); g_free(p4); g_free(project_root);
+    }
+    const char *candidates[] = {home_icon, "/usr/share/icons/hicolor/512x512/apps/pdf-translate.png", "/usr/share/pixmaps/pdf-translate.png", bundle_icon, project_icon, "assets/icon/app_icon.png", nullptr};
+    bool icon_ok = false;
+    for (int i = 0; candidates[i] != nullptr; i++) {
+      if (candidates[i] == nullptr) continue;
+      g_clear_error(&err);
+      pixbuf = gdk_pixbuf_new_from_file(candidates[i], &err);
+      if (pixbuf != nullptr) { gtk_window_set_icon(window, pixbuf); g_message("Icon OK: %s", candidates[i]); icon_ok = true; break; }
+    }
+    if (!icon_ok) g_message("Icon FAIL - nenhum candidato achado (home=%s bundle=%s project=%s)", home_icon ? home_icon : "(null)", bundle_icon ? bundle_icon : "(null)", project_icon ? project_icon : "(null)");
+    g_free(home_icon);
+    g_free(exe_link);
+    g_free(exe_path);
+    g_free(bundle_icon);
+    g_free(project_icon);
+  }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
