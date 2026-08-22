@@ -1,0 +1,19 @@
+{
+  "name": "pdf-translate",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"tsx watch server/index.ts\" \"vite client\"",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:client": "vite client",
+    "build": "vue-tsc -b client && vite build client",
+    "deploy": "npm run build && wrangler deploy",
+    "dev:worker": "npm run build && wrangler dev"
+  },
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

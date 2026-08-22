@@ -1,0 +1,14 @@
+name = "pdf-translate"
+main = "server/worker.ts"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "./client/dist"
+
+[[r2_buckets]]
+bucket_name = "pdf-translate-books"
+binding = "BOOKS"
+
+[[kv_namespaces]]
+binding = "PROGRESS"
+id = "be64f793921f4361bb5486865fd3fcff"
