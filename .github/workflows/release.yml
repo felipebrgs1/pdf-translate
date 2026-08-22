@@ -109,36 +109,8 @@ jobs:
           if [ -x /opt/pdf-translate/pdf-translate ]; then exec /opt/pdf-translate/pdf-translate "$@"; else exec /opt/pdf-translate/app "$@"; fi
           EOF
           chmod +x "${PKGDIR}/usr/bin/pdf-translate"
-          cat > "${PKGDIR}/usr/share/applications/pdf-translate.desktop" << 'DESKTOP_EOF'
-          [Desktop Entry]
-          Name=PDF Translate
-          GenericName=Leitor de PDF
-          Comment=Leitor de PDF com tradução, anotações e estatísticas
-          Exec=/usr/bin/pdf-translate %U
-          Icon=pdf-translate
-          Terminal=false
-          Type=Application
-          Categories=Office;Viewer;Education;
-          Keywords=pdf;translate;leitor;
-          StartupWMClass=dev.felipebrgs.pdftranslate
-          StartupNotify=true
-          MimeType=application/pdf;
-          DESKTOP_EOF
-          cat > "${PKGDIR}/usr/share/applications/dev.felipebrgs.pdftranslate.desktop" << 'DESKTOP_EOF'
-          [Desktop Entry]
-          Name=PDF Translate
-          GenericName=Leitor de PDF
-          Comment=Leitor de PDF com tradução, anotações e estatísticas
-          Exec=/usr/bin/pdf-translate %U
-          Icon=pdf-translate
-          Terminal=false
-          Type=Application
-          Categories=Office;Viewer;Education;
-          Keywords=pdf;translate;leitor;
-          StartupWMClass=dev.felipebrgs.pdftranslate
-          StartupNotify=true
-          MimeType=application/pdf;
-          DESKTOP_EOF
+          printf '%s\n' '[Desktop Entry]' 'Name=PDF Translate' 'GenericName=Leitor de PDF' 'Comment=Leitor de PDF com tradução, anotações e estatísticas' 'Exec=/usr/bin/pdf-translate %U' 'Icon=pdf-translate' 'Terminal=false' 'Type=Application' 'Categories=Office;Viewer;Education;' 'Keywords=pdf;translate;leitor;' 'StartupWMClass=dev.felipebrgs.pdftranslate' 'StartupNotify=true' 'MimeType=application/pdf;' > "${PKGDIR}/usr/share/applications/pdf-translate.desktop"
+          printf '%s\n' '[Desktop Entry]' 'Name=PDF Translate' 'GenericName=Leitor de PDF' 'Comment=Leitor de PDF com tradução, anotações e estatísticas' 'Exec=/usr/bin/pdf-translate %U' 'Icon=pdf-translate' 'Terminal=false' 'Type=Application' 'Categories=Office;Viewer;Education;' 'Keywords=pdf;translate;leitor;' 'StartupWMClass=dev.felipebrgs.pdftranslate' 'StartupNotify=true' 'MimeType=application/pdf;' > "${PKGDIR}/usr/share/applications/dev.felipebrgs.pdftranslate.desktop"
           if [ -f "assets/icon/app_icon.png" ]; then
             cp assets/icon/app_icon.png "${PKGDIR}/usr/share/icons/hicolor/512x512/apps/pdf-translate.png"
             cp assets/icon/app_icon.png "${PKGDIR}/usr/share/icons/hicolor/256x256/apps/pdf-translate.png"
