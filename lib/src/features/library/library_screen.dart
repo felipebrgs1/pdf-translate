@@ -108,6 +108,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  final Map<String, Future<Uint8List?>> _thumbFallback = {};
+  Future<Uint8List?> _ensureThumb(String key) {
+    return _thumbFallback.putIfAbsent(key, () async {
+      try {
+        final api = context.read<Api>();
+        final pdfBytes = await api.getBookBytes(key);
+        final thumb = await makeThumbnail(pdfBytes);
+        if (thumb != null) {
+          try { await api.uploadThumb(key, thumb); } catch (_) {}
+          return thumb;
+        }
+      } catch (_) {}
+      return null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -169,9 +185,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                           return Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true,
                                               errorBuilder: (_, __, ___) => Container(color: const Color(0xFF18181B), child: const Icon(Icons.broken_image, color: Colors.white24)));
                                         }
-                                        return Container(
-                                          color: const Color(0xFF18181B),
-                                          child: const Center(child: Icon(Icons.picture_as_pdf, color: Colors.white24, size: 40)),
+                                        // thumb faltando (ex: apos compressao que apagou) -> gera e reenvia
+                                        return FutureBuilder<Uint8List?>(
+                                          future: _ensureThumb(b.key),
+                                          builder: (_, snap2) {
+                                            if (snap2.connectionState == ConnectionState.waiting) {
+                                              return Container(color: const Color(0xFF18181B), child: const Center(child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))));
+                                            }
+                                            final tb = snap2.data;
+                                            if (tb != null && tb.isNotEmpty) {
+                                              return Image.memory(tb, fit: BoxFit.cover, gaplessPlayback: true);
+                                            }
+                                            return Container(
+                                              color: const Color(0xFF18181B),
+                                              child: const Center(child: Icon(Icons.picture_as_pdf, color: Colors.white24, size: 40)),
+                                            );
+                                          },
                                         );
                                       },
                                     ),

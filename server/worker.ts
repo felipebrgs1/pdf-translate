@@ -152,7 +152,7 @@ app.put('/api/books/:key', async (c) => {
     httpMetadata: { contentType: 'application/pdf' },
     customMetadata: existing.customMetadata ?? {}
   })
-  await c.env.BOOKS.delete(`thumbs/${key}.webp`)
+  // não apaga thumb — mantém capa (evita ficar sem capa como no bug do 'introducao sql')
   return c.json({ ok: true, key })
 })
 

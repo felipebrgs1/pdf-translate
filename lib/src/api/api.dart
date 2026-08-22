@@ -129,6 +129,15 @@ class Api {
     return r.bodyBytes;
   }
 
+  Future<void> uploadThumb(String key, Uint8List bytes) async {
+    final r = await _client.post(
+      Uri.parse('$baseUrl/api/thumbs'),
+      headers: {..._headers, 'Content-Type': 'image/webp', 'x-book-key': key},
+      body: bytes,
+    );
+    _json(r);
+  }
+
   Future<Map<String, DayStats>> getStats() async {
     final r = await _client.get(Uri.parse('$baseUrl/api/stats'), headers: _headers);
     final data = _json(r) as Map<String, dynamic>;
