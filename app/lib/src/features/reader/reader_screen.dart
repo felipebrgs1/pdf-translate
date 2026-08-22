@@ -22,6 +22,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
   bool _loading = true;
   String? _loadError;
   double _zoom = 1.0;
+  // pdf.js usa 0.5..3 com passos 0.5/0.75/1/1.25/1.5/2/3 — pdfrx tem delegate próprio, então sincronizamos via controller
+  double _displayZoom() {
+    if (_controller.isReady) {
+      try { return _controller.value.getMaxScaleOnAxis(); } catch (_) {}
+    }
+    return _zoom;
+  }
   String? _selectedText;
   String? _translated;
   bool _translating = false;
@@ -101,6 +108,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (total != 0 && total != _totalPages) {
       setState(() => _totalPages = total);
     }
+    // sincroniza zoom exibido com o real do controller (pinch + botoes)
+    try {
+      final z = _controller.value.getMaxScaleOnAxis();
+      if ((z - _zoom).abs() > 0.01) setState(() => _zoom = z);
+    } catch (_) {}
     if (p != null && p != _currentPage) {
       setState(() => _currentPage = p);
       if (p > _lastStatPage) _queueStat(pages: (p - _lastStatPage).clamp(0, 100));
@@ -170,9 +182,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
         leading: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white70), onPressed: () => Navigator.pop(context)),
         title: Text(widget.book.name, style: const TextStyle(color: Colors.white, fontSize: 14), overflow: TextOverflow.ellipsis),
         actions: [
-          IconButton(onPressed: () => setState(() => _zoom = (_zoom - 0.25).clamp(0.5, 3.0)), icon: const Icon(Icons.remove, color: Colors.white70)),
-          Center(child: Text('${(_zoom * 100).round()}%', style: const TextStyle(color: Colors.white70, fontSize: 12))),
-          IconButton(onPressed: () => setState(() => _zoom = (_zoom + 0.25).clamp(0.5, 3.0)), icon: const Icon(Icons.add, color: Colors.white70)),
+          IconButton(
+              onPressed: () async { await _controller.zoomDown(); setState(() => _zoom = _displayZoom()); },
+              icon: const Icon(Icons.remove, color: Colors.white70)),
+          Center(child: Text('${(_displayZoom() * 100).round()}%', style: const TextStyle(color: Colors.white70, fontSize: 12))),
+          IconButton(
+              onPressed: () async { await _controller.zoomUp(); setState(() => _zoom = _displayZoom()); },
+              icon: const Icon(Icons.add, color: Colors.white70)),
         ],
       ),
       body: Column(children: [
