@@ -126,17 +126,37 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
     return Scaffold(
       backgroundColor: Colors.black,
+      drawer: Drawer(
+        backgroundColor: const Color(0xFF18181B),
+        child: SafeArea(
+          child: Column(children: [
+            const SizedBox(height: 16),
+            const Icon(Icons.menu_book, color: Colors.white, size: 32),
+            const SizedBox(height: 8),
+            const Text('PDF Translate', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 24),
+            ListTile(leading: const Icon(Icons.bar_chart, color: Colors.white70), title: const Text('Estatísticas', style: TextStyle(color: Colors.white)), onTap: () { Navigator.pop(context); Navigator.pushNamed(context, '/stats'); }),
+            ListTile(leading: const Icon(Icons.add, color: Colors.white70), title: const Text('Adicionar PDF', style: TextStyle(color: Colors.white)), onTap: () { Navigator.pop(context); _pickAndUpload(); }),
+            const Spacer(),
+            const Divider(color: Colors.white12),
+            ListTile(leading: const Icon(Icons.logout, color: Colors.redAccent), title: const Text('Sair', style: TextStyle(color: Colors.white)), onTap: () async { await context.read<Api>().logout(); if (!mounted) return; Navigator.pushReplacementNamed(context, '/login'); }),
+            const SizedBox(height: 12),
+          ]),
+        ),
+      ),
       appBar: AppBar(
         backgroundColor: Colors.black,
         title: const Text('Biblioteca', style: TextStyle(color: Colors.white)),
         actions: [
           IconButton(onPressed: () => Navigator.pushNamed(context, '/stats'), icon: const Icon(Icons.bar_chart, color: Colors.white70)),
           IconButton(onPressed: _pickAndUpload, icon: const Icon(Icons.add, color: Colors.white)),
-          IconButton(
-              onPressed: () async { await context.read<Api>().logout(); if (mounted) Navigator.pushReplacementNamed(context, '/login'); },
-              icon: const Icon(Icons.logout, color: Colors.white70)),
+          if (!isMobile)
+            IconButton(
+                onPressed: () async { await context.read<Api>().logout(); if (mounted) Navigator.pushReplacementNamed(context, '/login'); },
+                icon: const Icon(Icons.logout, color: Colors.white70)),
         ],
       ),
       body: _loading
@@ -145,9 +165,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
               ? Center(child: Text(_error!, style: const TextStyle(color: Colors.redAccent)))
               : _books.isEmpty
                   ? const Center(child: Text('Nenhum livro ainda', style: TextStyle(color: Colors.white54)))
-                  : GridView.builder(
+                  : LayoutBuilder(builder: (_, c) {
+                      final cols = c.maxWidth < 600 ? 2 : (c.maxWidth < 900 ? 3 : 5);
+                      return GridView.builder(
                       padding: const EdgeInsets.all(16),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, childAspectRatio: 0.65, crossAxisSpacing: 12, mainAxisSpacing: 12),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols, childAspectRatio: 0.65, crossAxisSpacing: 12, mainAxisSpacing: 12),
                       itemCount: _books.length,
                       itemBuilder: (_, i) {
                         final b = _books[i];
@@ -260,7 +282,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         ),
                         );
                       },
-                    ),
+                    );
+                  }),
     );
   }
 }
