@@ -29,6 +29,18 @@ async function translateChromeEx(q: string, source: string, target: string) {
   } catch { return null }
 }
 
+async function translateMyMemory(q: string, target: string) {
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(q)}&langpair=auto|${encodeURIComponent(target)}`
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64)' } })
+    if (!res.ok) return null
+    const data = (await res.json()) as { responseData?: { translatedText?: string }; responseStatus?: number }
+    const t = data.responseData?.translatedText
+    if (data.responseStatus !== 200 || !t) return null
+    return { translated: t, source: 'auto' }
+  } catch { return null }
+}
+
 export const translateRoutes = new Hono<Env>()
 
 translateRoutes.get('/api/translate', async (c) => {
@@ -36,7 +48,7 @@ translateRoutes.get('/api/translate', async (c) => {
   const target = c.req.query('target') ?? 'pt'
   const source = c.req.query('source') ?? 'auto'
   if (!q?.trim()) return c.json({ error: 'missing q' }, 400)
-  const result = (await translateGtx(q, source, target)) ?? (await translateChromeEx(q, source, target))
+  const result = (await translateGtx(q, source, target)) ?? (await translateChromeEx(q, source, target)) ?? (await translateMyMemory(q, target))
   if (!result) return c.json({ error: 'translation failed' }, 502)
   return c.json({ ...result, target })
 })

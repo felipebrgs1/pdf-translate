@@ -165,11 +165,46 @@ class Api {
     _json(r);
   }
 
-  Future<String> translate(String q, String target) async {
+  Future<String> _translateDirect(String q, String target) async {
+    final uri = Uri.https('translate.googleapis.com', '/translate_a/single', {
+      'client': 'gtx',
+      'sl': 'auto',
+      'tl': target,
+      'dt': 't',
+      'q': q,
+    });
+    final r = await _client.get(uri, headers: {'User-Agent': 'Mozilla/5.0'});
+    if (r.statusCode != 200) throw Exception('direct failed ${r.statusCode}');
+    final data = jsonDecode(r.body) as List<dynamic>;
+    final parts = data[0] as List<dynamic>? ?? [];
+    return parts.map((p) => (p as List<dynamic>)[0] as String).join();
+  }
+
+  Future<String> _translateMyMemory(String q, String target) async {
+    final uri = Uri.https('api.mymemory.translated.net', '/get', {'q': q, 'langpair': 'auto|$target'});
+    final r = await _client.get(uri, headers: {'User-Agent': 'Mozilla/5.0'});
+    if (r.statusCode != 200) throw Exception('mymemory failed');
+    final data = jsonDecode(r.body) as Map<String, dynamic>;
+    final t = (data['responseData'] as Map<String, dynamic>?)?['translatedText'] as String?;
+    if (t == null || t.isEmpty) throw Exception('mymemory empty');
+    return t;
+  }
+
+  Future<String> _translateViaProxy(String q, String target) async {
     final uri = Uri.parse('$baseUrl/api/translate').replace(queryParameters: {'q': q, 'target': target});
     final r = await _client.get(uri, headers: _headers);
     final data = _json(r) as Map<String, dynamic>;
     return data['translated'] as String? ?? '';
+  }
+
+  Future<String> translate(String q, String target) async {
+    try {
+      return await _translateDirect(q, target);
+    } catch (_) {}
+    try {
+      return await _translateMyMemory(q, target);
+    } catch (_) {}
+    return await _translateViaProxy(q, target);
   }
 
   dynamic _json(http.Response r) {
