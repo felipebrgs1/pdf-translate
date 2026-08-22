@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -28,6 +27,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Uint8List? _pdfBytes;
   bool _loading = true;
   String? _loadError;
+  String? _viewerError;
   double _zoom = 1.0;
 
   // índice / capítulo
@@ -59,6 +59,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   String _pageKey() => 'pdf-translate:page:${widget.book.key}';
   String _today() => DateTime.now().toIso8601String().substring(0, 10);
+
+  bool _isValidPdf(Uint8List bytes) {
+    if (bytes.length < 4) return false;
+    // %PDF
+    return bytes[0] == 0x25 && bytes[1] == 0x50 && bytes[2] == 0x44 && bytes[3] == 0x46;
+  }
 
   // ── zoom ──
   double _displayZoom() {
@@ -179,12 +185,36 @@ class _ReaderScreenState extends State<ReaderScreen> {
     try { final prog = await api.getProgress(widget.book.key); if (prog != null && prog.page >= 1) { startPage = prog.page; try { final prefs = await SharedPreferences.getInstance(); await prefs.setInt(_pageKey(), startPage); } catch (_) {} } } catch (_) {}
 
     Uint8List? bytes; String? bytesError;
-    try { final fetched = await api.getBookBytes(widget.book.key); bytes = fetched; await savePdfToCache(widget.book.key, fetched); }
-    catch (e) { bytesError = e.toString(); try { final f = await cachedPdfFile(widget.book.key); if (await f.exists()) bytes = await f.readAsBytes(); } catch (_) {} }
+    try {
+      final fetched = await api.getBookBytes(widget.book.key);
+      if (!_isValidPdf(fetched)) {
+        throw Exception('Resposta não é PDF válido (primeiros bytes: ${fetched.take(20).toList()}) — pode ser 401/JSON');
+      }
+      bytes = fetched;
+      await savePdfToCache(widget.book.key, fetched);
+    } catch (e) {
+      bytesError = e.toString();
+      debugPrint('[Reader] download falhou: $e');
+      try {
+        final f = await cachedPdfFile(widget.book.key);
+        if (await f.exists()) {
+          final cached = await f.readAsBytes();
+          if (cached.isNotEmpty && _isValidPdf(cached)) {
+            bytes = cached;
+            bytesError = null;
+            debugPrint('[Reader] usando cache offline: ${cached.length} bytes');
+          } else if (cached.isNotEmpty) {
+            debugPrint('[Reader] cache inválido (não é PDF): ${cached.length} bytes');
+          }
+        }
+      } catch (ce) {
+        debugPrint('[Reader] cache fallback falhou: $ce');
+      }
+    }
 
     if (!mounted) return;
     if (bytes != null && bytes.isNotEmpty) {
-      setState(() { _pdfBytes = bytes; _initialPage = startPage; _currentPage = startPage; _lastStatPage = startPage; _loading = false; });
+      setState(() { _pdfBytes = bytes; _initialPage = startPage; _currentPage = startPage; _lastStatPage = startPage; _loading = false; _viewerError = null; });
       _loadOutline(bytes); _loadStats();
     } else {
       setState(() { _loadError = bytesError ?? 'Falha ao carregar PDF e sem cache offline'; _loading = false; });
@@ -249,13 +279,61 @@ class _ReaderScreenState extends State<ReaderScreen> {
             child: Row(children: [
               if (_showOutline) OutlineSidebar(outline: _outline, currentPage: _currentPage, onJump: _jumpToPage, onClose: () => setState(() => _showOutline = false)),
               Expanded(
-                child: TextSelectionTheme(
-                  data: const TextSelectionThemeData(selectionColor: Color(0x663B82F6), selectionHandleColor: Color(0xFF3B82F6), cursorColor: Color(0xFF3B82F6)),
-                  child: _loading ? const Center(child: CircularProgressIndicator())
-                      : _loadError != null ? Center(child: Text(_loadError!, style: const TextStyle(color: Colors.redAccent)))
-                      : _pdfBytes == null ? const Center(child: Text('Sem dados', style: TextStyle(color: Colors.white54)))
-                      : PdfViewer.data(_pdfBytes!, sourceName: widget.book.name, controller: _controller, initialPageNumber: _initialPage,
-                          params: PdfViewerParams(textSelectionParams: PdfTextSelectionParams(enabled: true, showContextMenuAutomatically: false, onTextSelectionChange: _onSelectionChanged))),
+                child: Container(
+                  color: Colors.black,
+                  child: TextSelectionTheme(
+                    data: const TextSelectionThemeData(selectionColor: Color(0x663B82F6), selectionHandleColor: Color(0xFF3B82F6), cursorColor: Color(0xFF3B82F6)),
+                    child: _loading
+                        ? const Center(child: CircularProgressIndicator())
+                        : _loadError != null
+                            ? _ErrorView(message: _loadError!, onRetry: () { setState(() { _loading = true; _loadError = null; }); _load(); })
+                            : _viewerError != null
+                                ? _ErrorView(message: _viewerError!, onRetry: () { setState(() => _viewerError = null); })
+                                : _pdfBytes == null
+                                    ? const Center(child: Text('Sem dados', style: TextStyle(color: Colors.white54)))
+                                    : PdfViewer.data(
+                                        _pdfBytes!,
+                                        key: ValueKey(widget.book.key),
+                                        // ignore: deprecated_member_use
+                                        sourceName: widget.book.key,
+                                        controller: _controller,
+                                        initialPageNumber: _initialPage,
+                                        params: PdfViewerParams(
+                                          backgroundColor: Colors.black,
+                                          margin: 8,
+                                          // ignore: deprecated_member_use
+                                          maxScale: 8,
+                                          // ignore: deprecated_member_use
+                                          minScale: 0.5,
+                                          pageDropShadow: const BoxShadow(color: Colors.black54, blurRadius: 4, offset: Offset(2, 2)),
+                                          enableKeyboardNavigation: true,
+                                          onDocumentChanged: (doc) {
+                                            debugPrint('[Reader] onDocumentChanged pages=${doc?.pages.length}');
+                                          },
+                                          onDocumentLoadFinished: (ref, succeeded) {
+                                            // ignore: deprecated_member_use
+                                            debugPrint('[Reader] onDocumentLoadFinished succeeded=$succeeded ref=${ref.sourceName}');
+                                            if (!succeeded && mounted) {
+                                              setState(() => _viewerError = 'Falha ao renderizar PDF — arquivo pode estar corrompido.');
+                                            }
+                                          },
+                                          loadingBannerBuilder: (ctx, bytesDownloaded, totalBytes) => const Center(child: CircularProgressIndicator()),
+                                          errorBannerBuilder: (ctx, error, stackTrace, docRef) => _ErrorView(
+                                            message: 'Erro ao abrir PDF: $error',
+                                            onRetry: () {
+                                              // força recarregar recarregando bytes
+                                              setState(() { _loading = true; _viewerError = null; _pdfBytes = null; });
+                                              _load();
+                                            },
+                                          ),
+                                          textSelectionParams: PdfTextSelectionParams(
+                                            enabled: true,
+                                            showContextMenuAutomatically: false,
+                                            onTextSelectionChange: _onSelectionChanged,
+                                          ),
+                                        ),
+                                      ),
+                  ),
                 ),
               ),
             ]),
@@ -266,6 +344,27 @@ class _ReaderScreenState extends State<ReaderScreen> {
           onPressed: () async { if (_selectedText == null) return; setState(() => _translating = true); try { final t = await api.translate(_selectedText!, 'pt'); if (mounted) setState(() => _translated = t); } finally { if (mounted) setState(() => _translating = false); } },
           child: const Icon(Icons.translate),
         ),
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _ErrorView({required this.message, required this.onRetry});
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.picture_as_pdf, size: 48, color: Colors.white24),
+          const SizedBox(height: 12),
+          Text(message, style: const TextStyle(color: Colors.redAccent, fontSize: 12), textAlign: TextAlign.center),
+          const SizedBox(height: 16),
+          FilledButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh, size: 18), label: const Text('Tentar novamente')),
+        ]),
       ),
     );
   }

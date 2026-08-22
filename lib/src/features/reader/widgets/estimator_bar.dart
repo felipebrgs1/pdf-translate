@@ -39,12 +39,10 @@ class EstimatorBar extends StatelessWidget {
               style: const TextStyle(color: Colors.white54, fontSize: 11)),
           if (ch != null && chapterRemaining != null && chapterRemaining > 0) ...[
             Container(width: 4, height: 4, decoration: const BoxDecoration(color: Color(0xFF3F3F46), shape: BoxShape.circle)),
-            Flexible(
-              child: Text(
-                'Cap. "${ch.title}" · faltam $chapterRemaining pág · ~${formatEta(chapterEta)}',
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
-                overflow: TextOverflow.ellipsis,
-              ),
+            Text(
+              'Cap. "${ch.title}" · faltam $chapterRemaining pág · ~${formatEta(chapterEta)}',
+              style: const TextStyle(color: Colors.white54, fontSize: 11),
+              overflow: TextOverflow.ellipsis,
             ),
           ] else if (ch != null && chapterRemaining == 0) ...[
             Container(width: 4, height: 4, decoration: const BoxDecoration(color: Color(0xFF3F3F46), shape: BoxShape.circle)),
