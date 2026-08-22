@@ -7,5 +7,7 @@
     "deploy": "flutter build web && wrangler deploy",
     "dev:worker": "flutter build web && wrangler dev"
   },
-  "devDependencies": {}
+  "dependencies": {
+    "hono": "^4.13.3"
+  }
 }

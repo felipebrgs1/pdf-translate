@@ -100,7 +100,7 @@ class Api {
 
   Future<void> replaceBookBytes(String key, Uint8List bytes) async {
     final r = await _client.put(
-      Uri.parse('$baseUrl/api/books/$key'),
+      Uri.parse('$baseUrl/api/books/${Uri.encodeComponent(key)}'),
       headers: {..._headers, 'Content-Type': 'application/pdf'},
       body: bytes,
     );
@@ -108,19 +108,19 @@ class Api {
   }
 
   Future<void> deleteBook(String key) async {
-    final r = await _client.delete(Uri.parse('$baseUrl/api/books/$key'), headers: _headers);
+    final r = await _client.delete(Uri.parse('$baseUrl/api/books/${Uri.encodeComponent(key)}'), headers: _headers);
     _json(r);
   }
 
   Future<BookProgress?> getProgress(String key) async {
-    final r = await _client.get(Uri.parse('$baseUrl/api/progress/$key'), headers: _headers);
+    final r = await _client.get(Uri.parse('$baseUrl/api/progress/${Uri.encodeComponent(key)}'), headers: _headers);
     if (r.statusCode == 404) return null;
     return BookProgress.fromJson(_json(r) as Map<String, dynamic>);
   }
 
   Future<BookProgress> saveProgress(String key, int page, int totalPages) async {
     final r = await _client.put(
-      Uri.parse('$baseUrl/api/progress/$key'),
+      Uri.parse('$baseUrl/api/progress/${Uri.encodeComponent(key)}'),
       headers: _headers,
       body: jsonEncode({'page': page, 'totalPages': totalPages}),
     );
@@ -128,13 +128,13 @@ class Api {
   }
 
   Future<Uint8List> getBookBytes(String key) async {
-    final r = await _client.get(Uri.parse('$baseUrl/api/books/$key'), headers: _headers);
+    final r = await _client.get(Uri.parse('$baseUrl/api/books/${Uri.encodeComponent(key)}'), headers: _headers);
     if (r.statusCode != 200) throw Exception('download failed ${r.statusCode}');
     return r.bodyBytes;
   }
 
   Future<Uint8List?> getThumbBytes(String key) async {
-    final r = await _client.get(Uri.parse('$baseUrl/api/thumbs/$key'), headers: _headers);
+    final r = await _client.get(Uri.parse('$baseUrl/api/thumbs/${Uri.encodeComponent(key)}'), headers: _headers);
     if (r.statusCode == 404) return null;
     if (r.statusCode != 200) throw Exception('thumb failed ${r.statusCode}');
     return r.bodyBytes;
@@ -208,8 +208,17 @@ class Api {
   }
 
   dynamic _json(http.Response r) {
-    final body = r.body.isEmpty ? '{}' : r.body;
-    final decoded = jsonDecode(body);
+    if (r.body.isEmpty) {
+      if (r.statusCode >= 400) throw Exception('request failed ${r.statusCode}');
+      return {};
+    }
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(r.body);
+    } catch (_) {
+      final preview = r.body.length > 200 ? '${r.body.substring(0, 200)}...' : r.body;
+      throw Exception('resposta inválida ${r.statusCode}: $preview');
+    }
     if (r.statusCode >= 400) {
       throw Exception((decoded is Map ? decoded['error'] : null) ?? 'request failed ${r.statusCode}');
     }
