@@ -29,6 +29,11 @@ class PdfTranslateApp extends StatelessWidget {
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: Colors.black,
         colorScheme: const ColorScheme.dark(primary: Colors.white),
+        textSelectionTheme: const TextSelectionThemeData(
+          selectionColor: Color(0x663B82F6),
+          selectionHandleColor: Color(0xFF3B82F6),
+          cursorColor: Color(0xFF3B82F6),
+        ),
       ),
       initialRoute: '/',
       onGenerateRoute: (settings) {

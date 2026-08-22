@@ -62,6 +62,29 @@ class _ReaderScreenState extends State<ReaderScreen> {
   String? _selectedText;
   String? _translated;
   bool _translating = false;
+  Timer? _selectionDebounce;
+
+  void _onSelectionChanged(PdfTextSelection sel) {
+    if (!sel.hasSelectedText) {
+      _selectionDebounce?.cancel();
+      if (mounted) setState(() { _selectedText = null; _translated = null; _translating = false; });
+      return;
+    }
+    _selectionDebounce?.cancel();
+    _selectionDebounce = Timer(const Duration(milliseconds: 400), () async {
+      try {
+        final text = (await sel.getSelectedText()).trim();
+        if (text.isEmpty || text.length < 2) return;
+        if (!mounted) return;
+        setState(() { _selectedText = text; _translated = null; _translating = true; });
+        final t = await context.read<Api>().translate(text, 'pt');
+        if (!mounted) return;
+        setState(() { _translated = t; _translating = false; });
+      } catch (_) {
+        if (mounted) setState(() => _translating = false);
+      }
+    });
+  }
 
   final _focusNode = FocusNode();
   int _pendingPages = 0, _pendingMinutes = 0, _pendingHighlights = 0;
@@ -240,6 +263,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   void dispose() {
+    _selectionDebounce?.cancel();
     HardwareKeyboard.instance.removeHandler(_handleHardwareKey);
     _focusNode.dispose();
     _controller.removeListener(_onViewerChange);
@@ -312,19 +336,32 @@ class _ReaderScreenState extends State<ReaderScreen> {
             child: Text('Faltam $remaining pág · ~${_formatEta(eta)} para terminar', style: const TextStyle(color: Colors.white54, fontSize: 11)),
           ),
         Expanded(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _loadError != null
-                  ? Center(child: Text(_loadError!, style: const TextStyle(color: Colors.redAccent)))
-                  : _pdfBytes == null
-                      ? const Center(child: Text('Sem dados', style: TextStyle(color: Colors.white54)))
-                      : PdfViewer.data(
-                          _pdfBytes!,
-                          sourceName: widget.book.name,
-                          controller: _controller,
-                          initialPageNumber: _initialPage,
-                          params: const PdfViewerParams(),
-                        ),
+          child: TextSelectionTheme(
+            data: const TextSelectionThemeData(
+              selectionColor: Color(0x663B82F6),
+              selectionHandleColor: Color(0xFF3B82F6),
+              cursorColor: Color(0xFF3B82F6),
+            ),
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _loadError != null
+                    ? Center(child: Text(_loadError!, style: const TextStyle(color: Colors.redAccent)))
+                    : _pdfBytes == null
+                        ? const Center(child: Text('Sem dados', style: TextStyle(color: Colors.white54)))
+                        : PdfViewer.data(
+                            _pdfBytes!,
+                            sourceName: widget.book.name,
+                            controller: _controller,
+                            initialPageNumber: _initialPage,
+                            params: PdfViewerParams(
+                              textSelectionParams: PdfTextSelectionParams(
+                                enabled: true,
+                                showContextMenuAutomatically: false,
+                                onTextSelectionChange: _onSelectionChanged,
+                              ),
+                            ),
+                          ),
+          ),
         ),
         if (_selectedText != null)
           Container(
