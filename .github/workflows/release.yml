@@ -93,37 +93,46 @@ jobs:
         run: |
           TAG="${{ steps.version.outputs.tag }}"
           VERSION="${{ steps.version.outputs.version }}"
-          # versão deb não pode ter hífen semântico extra, normaliza
           DEB_VERSION=$(echo "${VERSION}" | sed 's/-/~/' )
           BASENAME="pdf-translate-${TAG}-linux-x64"
           BUNDLE="build/linux/x64/release/bundle"
           PKGDIR="pkg_deb/pdf-translate"
+          APP_ID="dev.felipebrgs.pdftranslate"
           mkdir -p "${PKGDIR}/opt/pdf-translate"
           mkdir -p "${PKGDIR}/usr/bin"
           mkdir -p "${PKGDIR}/usr/share/applications"
           mkdir -p "${PKGDIR}/usr/share/icons/hicolor/512x512/apps"
+          mkdir -p "${PKGDIR}/usr/share/icons/hicolor/256x256/apps"
+          mkdir -p "${PKGDIR}/usr/share/pixmaps"
           cp -r "${BUNDLE}"/* "${PKGDIR}/opt/pdf-translate/"
-          # wrapper
+          # wrapper com fallback para compat com v1.0.0 (app vs pdf-translate)
           cat > "${PKGDIR}/usr/bin/pdf-translate" << 'EOF'
           #!/bin/sh
-          exec /opt/pdf-translate/app "$@"
+          if [ -x /opt/pdf-translate/pdf-translate ]; then exec /opt/pdf-translate/pdf-translate "$@"; else exec /opt/pdf-translate/app "$@"; fi
           EOF
           chmod +x "${PKGDIR}/usr/bin/pdf-translate"
-          # .desktop
-          cat > "${PKGDIR}/usr/share/applications/pdf-translate.desktop" << EOF
+          # .desktop principal + alias com APP_ID (Wayland exige app_id == desktop file basename)
+          for DF in pdf-translate.desktop ${APP_ID}.desktop; do
+          cat > "${PKGDIR}/usr/share/applications/${DF}" << EOF
           [Desktop Entry]
           Name=PDF Translate
-          Comment=Leitor de PDF com tradução
-          Exec=/opt/pdf-translate/app
+          GenericName=Leitor de PDF
+          Comment=Leitor de PDF com tradução, anotações e estatísticas
+          Exec=/usr/bin/pdf-translate %U
           Icon=pdf-translate
           Terminal=false
           Type=Application
-          Categories=Office;Viewer;
-          StartupWMClass=pdf_translate
+          Categories=Office;Viewer;Education;
+          Keywords=pdf;translate;leitor;
+          StartupWMClass=${APP_ID}
+          StartupNotify=true
+          MimeType=application/pdf;
           EOF
-          # ícone se existir
+          done
           if [ -f "assets/icon/app_icon.png" ]; then
             cp assets/icon/app_icon.png "${PKGDIR}/usr/share/icons/hicolor/512x512/apps/pdf-translate.png"
+            cp assets/icon/app_icon.png "${PKGDIR}/usr/share/icons/hicolor/256x256/apps/pdf-translate.png"
+            cp assets/icon/app_icon.png "${PKGDIR}/usr/share/pixmaps/pdf-translate.png"
           fi
           mkdir -p "${PKGDIR}/DEBIAN"
           cat > "${PKGDIR}/DEBIAN/control" << EOF

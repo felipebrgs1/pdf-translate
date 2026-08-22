@@ -17,6 +17,7 @@ set -euo pipefail
 
 REPO="felipebrgs1/pdf-translate"
 APP_NAME="pdf-translate"
+APP_ID="dev.felipebrgs.pdftranslate"
 DEFAULT_PREFIX="$HOME/.local/share/pdf-translate"
 DEFAULT_BIN_DIR="$HOME/.local/bin"
 
@@ -71,14 +72,12 @@ esac
 # resolve versão latest
 if [[ "$VERSION" == "latest" ]]; then
   echo "→ Buscando última release de $REPO..."
-  # tenta via redirect (sem API, sem rate limit)
   if command -v curl >/dev/null; then
     REDIRECT_URL=$(curl -fsSI "https://github.com/${REPO}/releases/latest" | tr -d '\r' | grep -i "^location:" | tail -1 | awk '{print $2}')
     if [[ -n "$REDIRECT_URL" ]]; then
       VERSION=$(basename "$REDIRECT_URL")
     fi
   fi
-  # fallback via API
   if [[ "$VERSION" == "latest" || -z "$VERSION" ]]; then
     VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)
   fi
@@ -89,7 +88,6 @@ if [[ "$VERSION" == "latest" ]]; then
   echo "→ Última versão: $VERSION"
 fi
 
-# normaliza: garante prefixo v
 if [[ "$VERSION" != v* ]]; then
   VERSION="v${VERSION}"
 fi
@@ -110,6 +108,9 @@ if [[ "$USE_DEB" == true ]]; then
   curl -fL --progress-bar -o "$TMPDIR/$DEB_NAME" "$DEB_URL"
   echo "→ Instalando .deb (requer sudo)..."
   sudo dpkg -i "$TMPDIR/$DEB_NAME" || sudo apt-get install -f -y
+  # atualiza desktop db
+  update-desktop-database ~/.local/share/applications 2>/dev/null || true
+  sudo update-desktop-database /usr/share/applications 2>/dev/null || true
   echo "✔ Instalado via .deb. Execute: pdf-translate"
   exit 0
 fi
@@ -126,7 +127,6 @@ if ! curl -fL --progress-bar -o "$TMPDIR/$TARBALL" "$URL"; then
   exit 1
 fi
 
-# verifica sha256 se disponível
 if curl -fsSL -o "$TMPDIR/$TARBALL.sha256" "$SHA_URL" 2>/dev/null; then
   echo "→ Verificando checksum..."
   if command -v sha256sum >/dev/null; then
@@ -138,27 +138,39 @@ fi
 
 echo "→ Extraindo para $PREFIX ..."
 mkdir -p "$PREFIX"
-# se for instalação system, precisa sudo
 if [[ "$PREFIX" == /opt/* ]]; then
   sudo mkdir -p "$PREFIX"
   sudo tar -xzf "$TMPDIR/$TARBALL" -C "$PREFIX" --strip-components=0 2>/dev/null || sudo tar -xzf "$TMPDIR/$TARBALL" -C "$PREFIX"
-  sudo chmod +x "$PREFIX/app" 2>/dev/null || true
+  # binário novo é pdf-translate, compat com app antigo
+  if [[ -f "$PREFIX/pdf-translate" ]]; then sudo chmod +x "$PREFIX/pdf-translate"; fi
+  if [[ -f "$PREFIX/app" ]]; then sudo chmod +x "$PREFIX/app"; fi
 else
   tar -xzf "$TMPDIR/$TARBALL" -C "$PREFIX" --strip-components=0 2>/dev/null || tar -xzf "$TMPDIR/$TARBALL" -C "$PREFIX"
+  chmod +x "$PREFIX/pdf-translate" 2>/dev/null || true
   chmod +x "$PREFIX/app" 2>/dev/null || true
 fi
 
-# cria wrapper/symlink
+# encontra binário (novo nome primeiro, fallback legado)
+BIN_CANDIDATE=""
+for cand in "$PREFIX/pdf-translate" "$PREFIX/app"; do
+  if [[ -f "$cand" ]]; then BIN_CANDIDATE="$cand"; break; fi
+done
+if [[ -z "$BIN_CANDIDATE" ]]; then
+  BIN_CANDIDATE=$(find "$PREFIX" -maxdepth 3 -name "pdf-translate" -type f 2>/dev/null | head -1)
+  if [[ -z "$BIN_CANDIDATE" ]]; then
+    BIN_CANDIDATE=$(find "$PREFIX" -maxdepth 3 -name "app" -type f 2>/dev/null | head -1)
+  fi
+fi
+if [[ -z "$BIN_CANDIDATE" ]]; then
+  echo "Erro: binário não encontrado em $PREFIX" >&2
+  ls -R "$PREFIX" | head -30
+  exit 1
+fi
+echo "→ Binário: $BIN_CANDIDATE"
+
+# cria wrapper
 mkdir -p "$BIN_DIR" 2>/dev/null || sudo mkdir -p "$BIN_DIR"
 WRAPPER="$BIN_DIR/pdf-translate"
-
-# encontra binário
-BIN_CANDIDATE="$PREFIX/app"
-if [[ ! -f "$BIN_CANDIDATE" ]]; then
-  # procura recursivo
-  BIN_CANDIDATE=$(find "$PREFIX" -maxdepth 3 -name "app" -type f | head -1)
-fi
-
 if [[ "$BIN_DIR" == /usr/local/bin || "$PREFIX" == /opt/* ]]; then
   sudo tee "$WRAPPER" >/dev/null <<EOF
 #!/bin/sh
@@ -173,22 +185,110 @@ EOF
   chmod +x "$WRAPPER"
 fi
 
-# .desktop
+# instala ícone
+ICON_SRC=""
+# tenta pegar do bundle (se houver) ou baixa do repo
+if [[ -f "$TMPDIR/icon.png" ]]; then
+  ICON_SRC="$TMPDIR/icon.png"
+fi
+# baixa do repo (sempre tenta manter atualizado)
+echo "→ Instalando ícone..."
+ICON_URL="https://raw.githubusercontent.com/${REPO}/main/assets/icon/app_icon.png"
+curl -fsSL -o "$TMPDIR/app_icon.png" "$ICON_URL" 2>/dev/null || true
+if [[ -f "$TMPDIR/app_icon.png" ]]; then
+  ICON_SRC="$TMPDIR/app_icon.png"
+fi
+
+# instala em hicolor (user ou system)
+if [[ "$PREFIX" == /opt/* || "$BIN_DIR" == /usr/local/bin ]]; then
+  sudo mkdir -p /usr/share/icons/hicolor/512x512/apps
+  sudo mkdir -p /usr/share/icons/hicolor/256x256/apps
+  sudo mkdir -p /usr/share/pixmaps
+  if [[ -n "$ICON_SRC" ]]; then
+    sudo cp "$ICON_SRC" /usr/share/icons/hicolor/512x512/apps/pdf-translate.png
+    sudo cp "$ICON_SRC" /usr/share/icons/hicolor/256x256/apps/pdf-translate.png
+    sudo cp "$ICON_SRC" /usr/share/pixmaps/pdf-translate.png
+  fi
+  sudo gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
+else
+  mkdir -p "$HOME/.local/share/icons/hicolor/512x512/apps"
+  mkdir -p "$HOME/.local/share/icons/hicolor/256x256/apps"
+  mkdir -p "$HOME/.local/share/pixmaps"
+  if [[ -n "$ICON_SRC" ]]; then
+    cp "$ICON_SRC" "$HOME/.local/share/icons/hicolor/512x512/apps/pdf-translate.png"
+    cp "$ICON_SRC" "$HOME/.local/share/icons/hicolor/256x256/apps/pdf-translate.png"
+    cp "$ICON_SRC" "$HOME/.local/share/pixmaps/pdf-translate.png" 2>/dev/null || true
+  fi
+  gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+fi
+
+# .desktop — com APP_ID correto para Wayland
 DESKTOP_DIR="$HOME/.local/share/applications"
-mkdir -p "$DESKTOP_DIR"
-cat > "$DESKTOP_DIR/pdf-translate.desktop" <<EOF
+if [[ "$PREFIX" == /opt/* ]]; then
+  DESKTOP_DIR="/usr/share/applications"
+  # também cria no user para garantir visibilidade
+  mkdir -p "$HOME/.local/share/applications"
+fi
+mkdir -p "$DESKTOP_DIR" 2>/dev/null || sudo mkdir -p "$DESKTOP_DIR"
+
+DESKTOP_FILE="$DESKTOP_DIR/pdf-translate.desktop"
+# desktop id deve bater com APPLICATION_ID para Wayland
+DESKTOP_ID_FILE="$DESKTOP_DIR/${APP_ID}.desktop"
+
+for DF in "$DESKTOP_FILE" "$DESKTOP_ID_FILE"; do
+  if [[ "$DF" == /usr/* ]]; then
+    sudo tee "$DF" >/dev/null <<EOF
 [Desktop Entry]
 Name=PDF Translate
-Comment=Leitor de PDF com tradução
-Exec=$WRAPPER
+GenericName=Leitor de PDF
+Comment=Leitor de PDF com tradução, anotações e estatísticas
+Exec=$WRAPPER %U
 Icon=pdf-translate
 Terminal=false
 Type=Application
-Categories=Office;Viewer;
-StartupWMClass=pdf_translate
+Categories=Office;Viewer;Education;
+Keywords=pdf;translate;leitor;
+StartupWMClass=$APP_ID
+StartupNotify=true
+MimeType=application/pdf;
 EOF
+  else
+    cat > "$DF" <<EOF
+[Desktop Entry]
+Name=PDF Translate
+GenericName=Leitor de PDF
+Comment=Leitor de PDF com tradução, anotações e estatísticas
+Exec=$WRAPPER %U
+Icon=pdf-translate
+Terminal=false
+Type=Application
+Categories=Office;Viewer;Education;
+Keywords=pdf;translate;leitor;
+StartupWMClass=$APP_ID
+StartupNotify=true
+MimeType=application/pdf;
+EOF
+  fi
+done
 
-# verifica PATH
+# remove desktop legado com WMClass errado
+if [[ -f "$HOME/.local/share/applications/pdf-translate.desktop" ]]; then
+  # já recriado acima com valor correto, só garante permissão
+  chmod +x "$HOME/.local/share/applications/pdf-translate.desktop" 2>/dev/null || true
+  chmod +x "$HOME/.local/share/applications/${APP_ID}.desktop" 2>/dev/null || true
+fi
+
+# atualiza desktop database
+update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+if [[ "$DESKTOP_DIR" == /usr/* ]]; then
+  sudo update-desktop-database /usr/share/applications 2>/dev/null || true
+fi
+
+# limpa desktop legado com ícone quebrado (se StartupWMClass antigo)
+if command -v desktop-file-validate >/dev/null 2>&1; then
+  desktop-file-validate "$DESKTOP_FILE" 2>&1 | head -5 || true
+fi
+
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
   echo ""
   echo "⚠  $BIN_DIR não está no PATH."
@@ -200,6 +300,10 @@ echo ""
 echo "✔ Instalado com sucesso!"
 echo "  Binário: $BIN_CANDIDATE"
 echo "  Atalho : $WRAPPER"
+echo "  Ícone  : pdf-translate (hicolor 512x512)"
+echo "  Desktop: $DESKTOP_FILE + $DESKTOP_ID_FILE"
+echo "  App ID : $APP_ID (Wayland)"
 echo "  Execute: pdf-translate  (ou $WRAPPER)"
 echo ""
-echo "Para desinstalar: rm -rf \"$PREFIX\" \"$WRAPPER\" \"$DESKTOP_DIR/pdf-translate.desktop\""
+echo "Se o ícone não aparecer, rode: gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor && update-desktop-database ~/.local/share/applications && faça logout/login"
+echo "Para desinstalar: rm -rf \"$PREFIX\" \"$WRAPPER\" \"$HOME/.local/share/applications/pdf-translate.desktop\" \"$HOME/.local/share/applications/${APP_ID}.desktop\" ~/.local/share/icons/hicolor/*/apps/pdf-translate.png"
