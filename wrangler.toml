@@ -3,7 +3,7 @@ main = "server/worker.ts"
 compatibility_date = "2025-01-01"
 
 [assets]
-directory = "./client/dist"
+directory = "./build/web"
 
 [[r2_buckets]]
 bucket_name = "pdf-translate-books"

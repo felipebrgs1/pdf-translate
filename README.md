@@ -1,49 +1,37 @@
-# pdf_translate — Monolito (Cloudflare Worker + Flutter)
-
-Monolito com backend e apps nativos a partir do projeto web original.
+# pdf_translate — Monolito Flutter + Worker
 
 ```
-pdf_translate/
-├── server/        # Cloudflare Worker (Hono + R2 + KV) — API
-│   └── worker.ts  # /api/login, /api/books, /api/progress, /api/stats, /api/translate, /api/thumbs
-├── app/           # Flutter (Android, iOS, Web, Windows, Linux, macOS)
-│   └── lib/       # auth / library / reader (pdf + tradução + anotações) / stats
-├── client/        # Vue legado (web original) — mantido para referência
-├── wrangler.toml  # Worker + R2 + KV + assets
-└── package.json   # scripts: build / deploy (worker)
+pdf_translate/           # Flutter na raiz (pubspec.yaml, lib/, android/, ios/, web/...)
+├── lib/                 # app Flutter: auth / library / reader (pdfrx + tradução + anotações) / stats
+├── android/ ios/ web/ linux/ windows/ macos/
+├── test/
+├── server/              # Cloudflare Worker (Hono + R2 + KV) — único backend
+│   └── worker.ts        # /api/login, /api/books, /api/progress, /api/stats, /api/translate, /api/thumbs
+├── wrangler.toml        # Worker + R2 + KV + assets (build/web)
+└── package.json         # scripts do Worker
 ```
+
+> `client/` (Vue) removido — Flutter agora é o front único na raiz.
 
 ## Backend
 
 ```bash
-npm run dev:worker   # worker + client build local
-npm run build        # vue-tsc + vite (gera client/dist para assets do Worker)
+npm run dev:server   # tsx watch server/index.ts
+npm run build        # flutter build web (gera build/web para assets do Worker)
 npm run deploy       # build + wrangler deploy
+npm run dev:worker   # build + wrangler dev
 ```
 
-Env (`server/worker.ts`):
-- `BOOKS` R2, `PROGRESS` KV, `JWT_SECRET`, `ALLOWED_EMAIL`, `PASSWORD_HASH`
-- Local: `.dev.vars`
+Env (`server/worker.ts`): `BOOKS` R2, `PROGRESS` KV, `JWT_SECRET`, `ALLOWED_EMAIL`, `PASSWORD_HASH` — local em `.dev.vars`
 
-## Flutter App
+## App Flutter
 
 ```bash
-cd app
 flutter pub get
 flutter run -d chrome        # web
 flutter run -d linux         # desktop
 flutter run -d android       # device/emulador
+flutter run -d ios
 ```
 
-Features replicadas do web:
-- login (JWT cookie -> token via header)
-- biblioteca (upload/list/delete + thumb)
-- leitor PDF (pdfrx) com seleção + popup tradução (Google gtx proxy)
-- anotações (marca-texto/desenho/borracha) salvas localmente
-- estatísticas (pages/minutes/highlights por dia + heatmap)
-- estimador de tempo livro/capítulo (baseado em outline + ritmo real)
-
-## Migrando do web
-
-Fluxo do app espelha `client/src/`:
-`api.ts` → `app/lib/src/api/` • `LibraryView.vue` → `library_screen.dart` • `ReaderView.vue`+`PdfViewer.vue` → `reader_screen.dart` • `StatsView.vue` → `stats_screen.dart`
+Features: login (JWT Bearer + SharedPreferences), biblioteca (upload/list/delete + thumb autenticada), leitor PDF (pdfrx) com zoom 50-300% e setas ←/→/↑/↓, tradução, anotações, estatísticas (heatmap), estimador livro/capítulo.

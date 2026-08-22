@@ -1,3 +1,4 @@
+# Node / Worker
 node_modules
 dist
 .wrangler
@@ -5,3 +6,33 @@ dist
 *.log
 core.*
 *.tsbuildinfo
+
+# Flutter/Dart/Pub
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+/coverage/
+*.class
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+*.iml
+*.ipr
+*.iws
+.idea/
+app.*.symbols
+app.*.map.json
+/android/app/debug
+/android/app/profile
+/android/app/release
+.widget_preview/
