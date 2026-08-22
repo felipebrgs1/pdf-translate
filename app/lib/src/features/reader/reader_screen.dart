@@ -60,6 +60,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   String? _translated;
   bool _translating = false;
 
+  final _focusNode = FocusNode();
   int _pendingPages = 0, _pendingMinutes = 0, _pendingHighlights = 0;
   int _lastStatPage = 1;
   String _tool = 'select';
@@ -74,10 +75,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   String _pageKey() => 'pdf-translate:page:${widget.book.key}';
 
+  bool _handleHardwareKey(KeyEvent e) {
+    if (e is! KeyDownEvent) return false;
+    if (e.logicalKey == LogicalKeyboardKey.arrowRight) { _nextPage(); return true; }
+    if (e.logicalKey == LogicalKeyboardKey.arrowLeft) { _prevPage(); return true; }
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
     _controller.addListener(_onViewerChange);
+    HardwareKeyboard.instance.addHandler(_handleHardwareKey);
     // leitura por minuto igual ao web
     _clock = Timer.periodic(const Duration(minutes: 1), (_) {
       if (!mounted) return;
@@ -85,7 +94,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _queueStat(minutes: 1);
       }
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      _focusNode.requestFocus();
+    });
   }
 
   Future<void> _load() async {
@@ -195,14 +207,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) { _nextPage(); return KeyEventResult.handled; }
-    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) { _prevPage(); return KeyEventResult.handled; }
+    // hardware handler já cuida de ←/→ globalmente (persiste após scroll); aqui só ignora para não duplicar
     return KeyEventResult.ignored;
   }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleHardwareKey);
+    _focusNode.dispose();
     _controller.removeListener(_onViewerChange);
     _saveTimer?.cancel();
     _clock?.cancel();
@@ -222,6 +234,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final eta = remaining * 2;
 
     return Focus(
+      focusNode: _focusNode,
       autofocus: true,
       onKeyEvent: _onKey,
       child: Scaffold(
