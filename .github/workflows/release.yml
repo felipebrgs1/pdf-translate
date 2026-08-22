@@ -118,7 +118,7 @@ jobs:
           EOF
           chmod +x "${PKGDIR}/usr/bin/pdf-translate"
           printf '%s\n' '[Desktop Entry]' 'Name=PDF Translate' 'GenericName=Leitor de PDF' 'Comment=Leitor de PDF com tradução, anotações e estatísticas' 'Exec=/usr/bin/pdf-translate %U' 'Icon=pdf-translate' 'Terminal=false' 'Type=Application' 'Categories=Office;Viewer;Education;' 'Keywords=pdf;translate;leitor;' 'StartupWMClass=dev.felipebrgs.pdftranslate' 'StartupNotify=true' 'MimeType=application/pdf;' > "${PKGDIR}/usr/share/applications/pdf-translate.desktop"
-          printf '%s\n' '[Desktop Entry]' 'Name=PDF Translate' 'GenericName=Leitor de PDF' 'Comment=Leitor de PDF com tradução, anotações e estatísticas' 'Exec=/usr/bin/pdf-translate %U' 'Icon=pdf-translate' 'Terminal=false' 'Type=Application' 'Categories=Office;Viewer;Education;' 'Keywords=pdf;translate;leitor;' 'StartupWMClass=dev.felipebrgs.pdftranslate' 'StartupNotify=true' 'MimeType=application/pdf;' > "${PKGDIR}/usr/share/applications/dev.felipebrgs.pdftranslate.desktop"
+          printf '%s\n' '[Desktop Entry]' 'Name=PDF Translate' 'Exec=/usr/bin/pdf-translate %U' 'Icon=pdf-translate' 'Terminal=false' 'Type=Application' 'NoDisplay=true' 'StartupWMClass=dev.felipebrgs.pdftranslate' 'StartupNotify=true' > "${PKGDIR}/usr/share/applications/dev.felipebrgs.pdftranslate.desktop"
           if [ -f "assets/icon/app_icon.png" ]; then
             cp assets/icon/app_icon.png "${PKGDIR}/usr/share/icons/hicolor/512x512/apps/pdf-translate.png"
             cp assets/icon/app_icon.png "${PKGDIR}/usr/share/icons/hicolor/256x256/apps/pdf-translate.png"

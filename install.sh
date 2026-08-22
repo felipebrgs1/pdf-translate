@@ -232,12 +232,12 @@ fi
 mkdir -p "$DESKTOP_DIR" 2>/dev/null || sudo mkdir -p "$DESKTOP_DIR"
 
 DESKTOP_FILE="$DESKTOP_DIR/pdf-translate.desktop"
-# desktop id deve bater com APPLICATION_ID para Wayland
+# alias com APP_ID para Wayland - fica oculto no menu para não duplicar
 DESKTOP_ID_FILE="$DESKTOP_DIR/${APP_ID}.desktop"
 
-for DF in "$DESKTOP_FILE" "$DESKTOP_ID_FILE"; do
-  if [[ "$DF" == /usr/* ]]; then
-    sudo tee "$DF" >/dev/null <<EOF
+# desktop principal (visível no menu)
+if [[ "$DESKTOP_FILE" == /usr/* ]]; then
+  sudo tee "$DESKTOP_FILE" >/dev/null <<EOF
 [Desktop Entry]
 Name=PDF Translate
 GenericName=Leitor de PDF
@@ -252,8 +252,8 @@ StartupWMClass=$APP_ID
 StartupNotify=true
 MimeType=application/pdf;
 EOF
-  else
-    cat > "$DF" <<EOF
+else
+  cat > "$DESKTOP_FILE" <<EOF
 [Desktop Entry]
 Name=PDF Translate
 GenericName=Leitor de PDF
@@ -268,8 +268,33 @@ StartupWMClass=$APP_ID
 StartupNotify=true
 MimeType=application/pdf;
 EOF
-  fi
-done
+fi
+# alias oculto (só para Wayland associar app_id, não aparece no menu)
+if [[ "$DESKTOP_ID_FILE" == /usr/* ]]; then
+  sudo tee "$DESKTOP_ID_FILE" >/dev/null <<EOF
+[Desktop Entry]
+Name=PDF Translate
+Exec=$WRAPPER %U
+Icon=pdf-translate
+Terminal=false
+Type=Application
+NoDisplay=true
+StartupWMClass=$APP_ID
+StartupNotify=true
+EOF
+else
+  cat > "$DESKTOP_ID_FILE" <<EOF
+[Desktop Entry]
+Name=PDF Translate
+Exec=$WRAPPER %U
+Icon=pdf-translate
+Terminal=false
+Type=Application
+NoDisplay=true
+StartupWMClass=$APP_ID
+StartupNotify=true
+EOF
+fi
 
 # remove desktop legado com WMClass errado
 if [[ -f "$HOME/.local/share/applications/pdf-translate.desktop" ]]; then
