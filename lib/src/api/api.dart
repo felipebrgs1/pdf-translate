@@ -87,6 +87,15 @@ class Api {
     return Book.fromJson(_json(r) as Map<String, dynamic>);
   }
 
+  Future<void> replaceBookBytes(String key, Uint8List bytes) async {
+    final r = await _client.put(
+      Uri.parse('$baseUrl/api/books/$key'),
+      headers: {..._headers, 'Content-Type': 'application/pdf'},
+      body: bytes,
+    );
+    _json(r);
+  }
+
   Future<void> deleteBook(String key) async {
     final r = await _client.delete(Uri.parse('$baseUrl/api/books/$key'), headers: _headers);
     _json(r);

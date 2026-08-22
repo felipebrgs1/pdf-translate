@@ -61,6 +61,53 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  Future<void> _compressExisting(Book book) async {
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(content: Text('Baixando PDF...')));
+    try {
+      final api = context.read<Api>();
+      final original = await api.getBookBytes(book.key);
+      final origLen = original.length;
+      messenger.showSnackBar(SnackBar(content: Text('Comprimindo ${formatBytes(origLen)}...')));
+      final compressed = await compressPdf(original);
+      if (compressed.length >= origLen * 0.98) {
+        messenger.showSnackBar(const SnackBar(content: Text('Já está otimizado — sem economia relevante')));
+        return;
+      }
+      final saved = origLen - compressed.length;
+      messenger.showSnackBar(SnackBar(content: Text('Economizado ${formatBytes(saved)} — reenviando...')));
+      await api.replaceBookBytes(book.key, compressed);
+      try { final f = await cachedPdfFile(book.key); if (await f.exists()) await f.delete(); } catch (_) {}
+      await _refresh();
+      if (mounted) messenger.showSnackBar(SnackBar(content: Text('Comprimido: ${formatBytes(origLen)} → ${formatBytes(compressed.length)} (-${((saved / origLen) * 100).toStringAsFixed(0)}%)')));
+    } catch (e) {
+      if (mounted) messenger.showSnackBar(SnackBar(content: Text('Falha: $e')));
+    }
+  }
+
+  Future<void> _removeBook(Book book) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF18181B),
+        title: const Text('Remover livro?', style: TextStyle(color: Colors.white)),
+        content: Text('"${book.name}" será removido.', style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remover')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await context.read<Api>().deleteBook(book.key);
+      try { final f = await cachedPdfFile(book.key); if (await f.exists()) await f.delete(); } catch (_) {}
+      await _refresh();
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -88,7 +135,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       itemCount: _books.length,
                       itemBuilder: (_, i) {
                         final b = _books[i];
-                        return InkWell(
+                        return GestureDetector(
+                          onSecondaryTapDown: (d) async {
+                            final v = await showMenu<String>(
+                              context: context,
+                              position: RelativeRect.fromLTRB(d.globalPosition.dx, d.globalPosition.dy, d.globalPosition.dx, d.globalPosition.dy),
+                              items: const [
+                                PopupMenuItem(value: 'compress', child: Row(children: [Icon(Icons.compress, size: 18), SizedBox(width: 8), Text('Comprimir')])),
+                                PopupMenuItem(value: 'remove', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.redAccent), SizedBox(width: 8), Text('Remover')])),
+                              ],
+                            );
+                            if (v == 'compress') _compressExisting(b);
+                            if (v == 'remove') _removeBook(b);
+                          },
+                          child: InkWell(
                           onTap: () => Navigator.pushNamed(context, '/reader', arguments: b).then((_) => _refresh()),
                           child: Container(
                             clipBehavior: Clip.antiAlias,
@@ -133,6 +193,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                       },
                                     ),
                                   ),
+                                  Positioned(
+                                    left: 6,
+                                    top: 6,
+                                    child: PopupMenuButton<String>(
+                                      padding: EdgeInsets.zero,
+                                      icon: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(6)), child: const Icon(Icons.more_vert, size: 14, color: Colors.white70)),
+                                      onSelected: (v) {
+                                        if (v == 'compress') _compressExisting(b);
+                                        if (v == 'remove') _removeBook(b);
+                                      },
+                                      itemBuilder: (_) => const [
+                                        PopupMenuItem(value: 'compress', child: Row(children: [Icon(Icons.compress, size: 18), SizedBox(width: 8), Text('Comprimir')])),
+                                        PopupMenuItem(value: 'remove', child: Row(children: [Icon(Icons.delete, size: 18, color: Colors.redAccent), SizedBox(width: 8), Text('Remover')])),
+                                      ],
+                                    ),
+                                  ),
                                 ]),
                               ),
                               Padding(
@@ -152,6 +228,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                               ),
                             ]),
                           ),
+                        ),
                         );
                       },
                     ),

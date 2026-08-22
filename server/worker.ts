@@ -140,6 +140,22 @@ app.post('/api/books', async (c) => {
   return c.json({ key, name })
 })
 
+app.put('/api/books/:key', async (c) => {
+  const user = await getUser(c)
+  if (!user) return c.json({ error: 'unauthorized' }, 401)
+  const key = c.req.param('key')
+  const existing = await c.env.BOOKS.get(key)
+  if (!existing) return c.json({ error: 'not found' }, 404)
+  const body = await c.req.arrayBuffer()
+  if (!body.byteLength) return c.json({ error: 'empty file' }, 400)
+  await c.env.BOOKS.put(key, body, {
+    httpMetadata: { contentType: 'application/pdf' },
+    customMetadata: existing.customMetadata ?? {}
+  })
+  await c.env.BOOKS.delete(`thumbs/${key}.webp`)
+  return c.json({ ok: true, key })
+})
+
 app.get('/api/books/:key', async (c) => {
   const obj = await c.env.BOOKS.get(c.req.param('key'))
   if (!obj) return c.json({ error: 'not found' }, 404)
