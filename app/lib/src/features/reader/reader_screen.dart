@@ -41,6 +41,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       final center = _controller.visibleRect.center;
       await _controller.setZoom(center, next!);
       setState(() => _zoom = next!);
+      _focusNode.requestFocus();
     } catch (_) {}
   }
 
@@ -54,6 +55,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       final center = _controller.visibleRect.center;
       await _controller.setZoom(center, prev!);
       setState(() => _zoom = prev!);
+      _focusNode.requestFocus();
     } catch (_) {}
   }
   String? _selectedText;
@@ -79,7 +81,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (e is! KeyDownEvent) return false;
     if (e.logicalKey == LogicalKeyboardKey.arrowRight) { _nextPage(); return true; }
     if (e.logicalKey == LogicalKeyboardKey.arrowLeft) { _prevPage(); return true; }
+    if (e.logicalKey == LogicalKeyboardKey.arrowUp) { _scrollBy(-300); return true; }
+    if (e.logicalKey == LogicalKeyboardKey.arrowDown) { _scrollBy(300); return true; }
     return false;
+  }
+
+  Future<void> _scrollBy(double dy) async {
+    if (!_controller.isReady) return;
+    try {
+      final cur = _controller.visibleRect;
+      final maxY = (_controller.documentSize.height - _controller.viewSize.height / _controller.value.getMaxScaleOnAxis()).clamp(0, double.infinity);
+      final ny = (cur.top + dy).clamp(0.0, maxY is double ? maxY : double.infinity);
+      await _controller.goToPosition(documentOffset: Offset(cur.left, ny.toDouble()));
+    } catch (_) {}
   }
 
   @override
